@@ -1,0 +1,244 @@
+import tkinter as tk
+from tkinter import messagebox
+import webbrowser
+import requests
+
+# ANSI color codes
+PEACH = '\033[38;5;208m'
+RESET = '\033[0m'
+
+# Map ANSI color codes to Tkinter-compatible colors
+ANSI_TO_TK_COLOR = {
+    '\033[38;5;208m': '#FFCC99',  # Peach color
+    '\033[38;5;165m': '#9966CC',  # Violet color
+    '\033[0m': 'black',           # Reset to default color (black in this case)
+}
+
+def strip_ansi_codes(text):
+    for ansi_code in ANSI_TO_TK_COLOR.keys():
+        text = text.replace(ansi_code, "")
+    return text
+
+def apply_ansi_color(text):
+    for ansi_code, tk_color in ANSI_TO_TK_COLOR.items():
+        text = text.replace(ansi_code, tk_color)
+    return text
+
+def recipe_search(ingredient, meal, health, max_calories):
+    app_id = 'b439da01'
+    app_key = '98831ee70ca2a33d69f6f75c04e65f5b'
+
+    if health.lower() == 'no':
+        health = ""  # Change 'no' to empty string
+
+    if health:
+        url = (
+            'https://api.edamam.com/search?q={}&app_id={}&app_key={}&mealType={}&health={}&calories=0-{}&health=alcohol-free'
+            .format(ingredient, app_id, app_key, meal, health, max_calories)
+        )
+    else:
+        url = (
+            'https://api.edamam.com/search?q={}&app_id={}&app_key={}&mealType={}&calories=0-{}&health=alcohol-free'
+            .format(ingredient, app_id, app_key, meal, max_calories)
+        )
+
+    print(f"{apply_ansi_color('\033[38;5;208m')}API URL:{apply_ansi_color('\033[0m')}", url)
+    result = requests.get(url)
+    data = result.json()
+
+    if 'hits' in data:
+        return data['hits']
+    else:
+        print(f"{apply_ansi_color('\033[38;5;208m')}API Response:{apply_ansi_color('\033[0m')}", data)
+        return []
+
+def is_alcohol_ingredient(ingredient):
+    alcohol_keywords = ['wine', 'beer', 'brandy', 'whiskey', 'vodka', 'rum', 'tequila', 'champagne', 'cognac', 'liqueur']
+    return any(keyword in ingredient.lower() for keyword in alcohol_keywords)
+
+def get_calorie_range(age_group):
+    if age_group == "baby":
+        return 100, 400
+    elif age_group == "toddler":
+        return 300, 600
+    elif age_group == "child":
+        return 500, 800
+    elif age_group == "teenager":
+        return 700, 1000
+    else:
+        return 800, 1200
+
+def get_age_group(age):
+    if age < 2:
+        return "baby"
+    elif 2 <= age <= 5:
+        return "toddler"
+    elif 6 <= age <= 12:
+        return "child"
+    elif 13 <= age <= 18:
+        return "teenager"
+    else:
+        return "adult"
+
+def show_results_window(results, age_group, ingredient):
+    # Create a new window for displaying results
+    results_window = tk.Toplevel()
+    results_window.title("Recipe Results")
+
+    text_area = tk.Text(results_window, wrap=tk.WORD)
+    text_area.pack(padx=20, pady=20)
+
+    # Age group specific message
+    age_message = ""
+    if age_group == "baby":
+        age_message = f"Oh, you have a baby! Let me look into something fun and nutritious for your little one..."
+    elif age_group == "toddler":
+        age_message = f"Ah, a toddler! Let's find some delicious and healthy recipes for your little explorer..."
+    elif age_group == "child":
+        age_message = f"Great! A child ready to explore new flavors. Let's discover some nutritious recipes together..."
+    elif age_group == "teenager":
+        age_message = f"A teenager, how exciting! Let's find some tasty and wholesome recipes for your growing teen..."
+    elif age_group == "adult":
+        age_message = f"Finding recipes for adults with {ingredient}..."
+
+    text_area.insert(tk.END, strip_ansi_codes(f"{PEACH}{age_message}{RESET}\n\n"))
+    text_area.insert(tk.END, strip_ansi_codes(f"{PEACH}We are finding recipes for your {age_group} with {ingredient}.{RESET}\n\n"))
+
+    for result in results:
+        recipe = result['recipe']
+        label = recipe['label']
+        url = recipe['url']
+        calories = recipe.get('calories', 'N/A')
+
+        text_area.insert(tk.END, strip_ansi_codes(f"{'\033[38;5;165m'}{label}{RESET}\n"))
+        text_area.insert(tk.END, f"Calories: {calories}\n")
+        text_area.insert(tk.END, f"URL: {url}\n")
+        text_area.insert(tk.END, "\n")
+
+        # Make the URL clickable
+        text_area.tag_configure("link", foreground="blue", underline=True)
+        text_area.tag_bind("link", "<Button-1>", lambda event, url=url: webbrowser.open_new(url))
+
+        # Apply the "link" tag to the URL text
+        start = text_area.search(url, tk.END)
+        text_area.tag_add("link", start, f"{start}+{len(url)}c")
+
+    text_area.configure(state='disabled')  # Disable editing
+
+    # Button to make a new search
+    new_search_button = tk.Button(results_window, text="New Search",
+                                  command=lambda: [results_window.destroy(), questions_frame.pack()])
+    new_search_button.pack(pady=10)
+
+    # Spotify playlist
+    inspire_label = tk.Label(results_window, text="Here is something to inspire family time:", font=('Helvetica', 14))
+    inspire_label.pack(pady=10)
+
+    spotify_button = tk.Button(results_window, text="Open Spotify Playlist", command=lambda: webbrowser.open("https://open.spotify.com/embed/playlist/37i9dQZF1DXd4bJEFQJTXh?utm_source=generator"))
+    spotify_button.pack(pady=5)
+
+    # Dashboard message
+    dashboard_message = tk.Label(results_window, text="Don't worry, your results will be safe at your dashboard.", font=('Helvetica', 12))
+    dashboard_message.pack(pady=10)
+
+    dashboard_button = tk.Button(results_window, text="Go to Dashboard", command=lambda: webbrowser.open("https://yourdashboardurl.com"))
+    dashboard_button.pack(pady=5)
+
+def on_start_clicked():
+    # Hide the welcome frame and show the questions frame
+    welcome_frame.pack_forget()
+    questions_frame.pack()
+
+def on_submit_clicked(event=None):
+    ingredient = ingredient_entry.get()
+    age = int(age_entry.get())
+    meal = meal_entry.get()
+    health = health_entry.get()
+
+    if is_alcohol_ingredient(ingredient):
+        messagebox.showinfo("Yummy Yummy Apple", f"Our recipes promote well-being and do not include alcohol.")
+        return
+
+    age_group = get_age_group(age)
+    min_calories, max_calories = get_calorie_range(age_group)
+
+    results = recipe_search(ingredient, meal, health, max_calories)
+
+    if results:
+        show_results_window(results, age_group, ingredient)
+    else:
+        messagebox.showinfo("Yummy Yummy Apple", "No recipes found. Try different parameters.")
+
+def create_placeholder(entry, question, example):
+    entry.insert(0, example)
+    entry.bind("<FocusIn>", lambda event: clear_placeholder(event, question, example))
+    entry.bind("<FocusOut>", lambda event: restore_placeholder(event, question, example))
+    entry.bind("<Return>", lambda event: focus_next_widget(event))
+
+def clear_placeholder(event, question, example):
+    if event.widget.get() == example:
+        event.widget.delete(0, tk.END)
+        event.widget.config(fg='black')
+
+def restore_placeholder(event, question, example):
+    if event.widget.get() == "":
+        event.widget.insert(0, example)
+        event.widget.config(fg='grey')
+
+def focus_next_widget(event):
+    event.widget.tk_focusNext().focus()
+    return "break"
+
+# Create main window
+root = tk.Tk()
+root.title("Yummy Yummy Apple")
+
+# Welcome frame
+welcome_frame = tk.Frame(root, padx=20, pady=20)
+welcome_label = tk.Label(welcome_frame, text="Welcome to Yummy Yummy Apple!", font=('Helvetica', 24, 'bold'))
+welcome_label.pack()
+start_button = tk.Button(welcome_frame, text="Start", command=on_start_clicked)
+start_button.pack()
+welcome_frame.pack()  # Only pack the welcome frame initially
+
+# Questions frame
+questions_frame = tk.Frame(root, padx=20, pady=20)
+
+ingredient_label = tk.Label(questions_frame, text="Enter the ingredient:")
+ingredient_label.pack()
+
+ingredient_example = "e.g., chicken, carrots, beans"
+ingredient_entry = tk.Entry(questions_frame, fg='grey')
+create_placeholder(ingredient_entry, "Enter the ingredient:", ingredient_example)
+ingredient_entry.pack()
+
+age_label = tk.Label(questions_frame, text="How old is your child?")
+age_label.pack()
+
+age_example = "e.g., 1, 5, 16"
+age_entry = tk.Entry(questions_frame, fg='grey')
+create_placeholder(age_entry, "How old is your child?", age_example)
+age_entry.pack()
+
+meal_label = tk.Label(questions_frame, text="What meal type would you like?")
+meal_label.pack()
+
+meal_example = "e.g., breakfast, lunch, dinner"
+meal_entry = tk.Entry(questions_frame, fg='grey')
+create_placeholder(meal_entry, "What meal type would you like?", meal_example)
+meal_entry.pack()
+
+health_label = tk.Label(questions_frame, text="Any dietary restrictions? (If none, just enter: no)")
+health_label.pack()
+
+health_example = "e.g., vegan, gluten-free, no"
+health_entry = tk.Entry(questions_frame, fg='grey')
+create_placeholder(health_entry, "Any dietary restrictions? (If none, just enter: no)", health_example)
+health_entry.pack()
+
+submit_button = tk.Button(questions_frame, text="Submit", command=on_submit_clicked)
+submit_button.pack(pady=10)
+
+root.bind('<Return>', on_submit_clicked)  # Bind Enter key to submit
+
+root.mainloop()
